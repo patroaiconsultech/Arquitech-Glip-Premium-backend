@@ -1,0 +1,14 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1     PYTHONUNBUFFERED=1     PYTHONPATH=/app/src
+
+WORKDIR /app
+COPY requirements.lock.txt requirements.bim-worker.lock.txt ./
+RUN pip install --no-cache-dir -r requirements.lock.txt -r requirements.bim-worker.lock.txt
+
+COPY src ./src
+COPY scripts ./scripts
+COPY migrations ./migrations
+COPY alembic.ini ./
+
+CMD ["python","scripts/process_bim_jobs.py"]

@@ -1,0 +1,75 @@
+{
+  "product": "GLIP Platform Backend",
+  "version": "1.0.0rc8",
+  "repository": "TO_BE_CREATED",
+  "commit": "TO_BE_CAPTURED",
+  "environment": "staging",
+  "migration_head": "0009_glip_pricing_authority_hardening",
+  "database": {
+    "isolated": true,
+    "schema": "glip"
+  },
+  "production_approved": false,
+  "deploy_executed": false,
+  "human_approval_required": true,
+  "external_delivery_enabled": false,
+  "candidate_label": "RC8_PRICING_AUTHORITY_HARDENING",
+  "auth_mode_target": "native_session",
+  "runtime_dependency_lock": "requirements.lock.txt",
+  "runtime_dependency_lock_scope": "exact runtime pins; fresh network install still required in CI/build",
+  "railway_port_dynamic": true,
+  "readiness_http_503_on_not_ready": true,
+  "orkio_contract": {
+    "request": "ORKIO-CAPABILITY-REQUEST-1",
+    "response": "ORKIO-RESPONSE-1",
+    "real_wire": "NOT_PROVEN"
+  },
+  "fnd008": {
+    "status": "PATCHED_CODE_LEVEL",
+    "mechanism": "SELECT_FOR_UPDATE_PLUS_POPULATE_EXISTING",
+    "real_postgres_concurrency": "NOT_PROVEN"
+  },
+  "artifact_foundation": {
+    "billing_scope": "glip",
+    "formats": [
+      "docx",
+      "pdf",
+      "pptx",
+      "xlsx"
+    ],
+    "storage_isolated": true,
+    "image_provider": "NOT_IMPLEMENTED"
+  },
+  "architecture_foundation": {
+    "ifc_first_class": true,
+    "ifc_semantic_parser": "IMPLEMENTED_ADAPTER_WORKER_RUNTIME_NOT_PROVEN",
+    "dwg_automation": "NOT_IMPLEMENTED_EXTERNAL_ADAPTER",
+    "scene_schema": "glip.arch.scene.v1",
+    "render_worker": "NOT_IMPLEMENTED_GATE_4",
+    "dxf_semantic_parser": "IMPLEMENTED_EZDXF",
+    "geometry_preview": "IMPLEMENTED_TRIMESH_LINEWORK_ONLY",
+    "quantity_takeoff": "glip.quantity-takeoff.v1",
+    "authoritative_3d_geometry": "NOT_IMPLEMENTED"
+  },
+  "bim_semantic_ingestion": {
+    "engine": "ifcopenshell",
+    "engine_version_target": "0.8.5",
+    "worker_isolated": true,
+    "semantic_scene_schema": "glip.arch.scene.v1",
+    "ifc_source_of_truth": true,
+    "web_process_parsing": false,
+    "real_ifcopenshell_runtime": "NOT_PROVEN"
+  },
+  "pricing_intelligence": {
+    "status": "IMPLEMENTED_FAIL_CLOSED_LOCAL",
+    "market_price_registry": "IMPLEMENTED",
+    "official_source_contracts": "IMPLEMENTED_RUNTIME_NOT_PROVEN",
+    "official_source_executable_authority": "SERVER_VERIFIED_ONLY",
+    "manual_supplier_quote_authority": "EXPLICIT_OWNER_APPROVAL_REQUIRED",
+    "quantity_price_mapping": "EXPLICIT_OWNER_APPROVAL_REQUIRED",
+    "professional_fee_engine": "IMPLEMENTED_OWNER_GATED",
+    "construction_cost_engine": "IMPLEMENTED_OWNER_GATED",
+    "actual_cost_evidence": "TENANT_PROJECT_DOCUMENT_COST_EVIDENCE_REQUIRED",
+    "llm_numeric_authority": false
+  }
+}

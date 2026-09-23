@@ -1,0 +1,134 @@
+{
+  "product": "GLIP Platform Backend",
+  "candidate_label": "RC8_PRICING_AUTHORITY_HARDENING",
+  "version": "1.0.0rc8",
+  "baseline": {
+    "artifact": "GLIP-Backend-RC7-BASELINE-REGENERATED.zip",
+    "sha256": "031f18b7b32f3a5f9ee31041a0863026190422649a62b2e0659bc8b5f16b9204"
+  },
+  "migration_head": "0009_glip_pricing_authority_hardening",
+  "auth": {
+    "mode": "native_session",
+    "oidc": false,
+    "public_registration": false,
+    "tenant_explicit": true,
+    "password_kdf": "scrypt",
+    "per_credential_random_salt": true,
+    "server_side_pepper": true,
+    "server_side_session": true,
+    "raw_session_token_persisted": false,
+    "absolute_expiry": true,
+    "idle_expiry": true,
+    "persistent_account_lockout": true,
+    "csrf_origin_guard": true,
+    "bootstrap_cli_only": true,
+    "password_reset_cli_only": true,
+    "mfa_passkeys": "NOT_IMPLEMENTED_RESIDUAL_REVIEW_REQUIRED",
+    "edge_rate_limit": "ENVIRONMENT_RUNTIME_GATE"
+  },
+  "deployment_hardening": {
+    "railway_dynamic_port": true,
+    "readiness_503_when_not_ready": true,
+    "postgres_url_psycopg3_normalization": true,
+    "runtime_lock_entries": 43,
+    "docker_base_digest_pinned": true
+  },
+  "checks": {
+    "compileall": "PASS_LOCAL",
+    "pytest": "185_PASS_LOCAL_RC8_AUTHORITY_HARDENING",
+    "runtime_lock": "PASS_LOCAL_43",
+    "migration_smoke": "0008_0009_0008_0009_UP_DOWN_UP_PASS_LOCAL_SQLITE",
+    "postgres_offline_ddl": "PASS_LOCAL",
+    "real_postgres_runtime": "NOT_PROVEN",
+    "fresh_network_docker_build": "NOT_PROVEN",
+    "runtime_oidc_jwks_hits": 0,
+    "fnd008_postgresql_sql_contract": "FOR_UPDATE_PLUS_POPULATE_EXISTING_PASS_LOCAL",
+    "real_postgres_concurrency": "NOT_PROVEN",
+    "railway_runtime": "NOT_PROVEN",
+    "artifact_document_roundtrip": "PASS_LOCAL",
+    "ifc_upload_contract": "PASS_LOCAL",
+    "autodesk_aps_wire": "NOT_PROVEN",
+    "ifcopenshell_runtime": "ADAPTER_IMPLEMENTED_REAL_ENGINE_NOT_INSTALLED_IN_AUDIT_RUNTIME",
+    "blender_worker_runtime": "NOT_IMPLEMENTED_GATE_4",
+    "bim_semantic_contract": "PASS_LOCAL_FAKE_ENGINE",
+    "dxf_semantic_adapter": "PASS_LOCAL_EZDXF_1_4_4_SYNTHETIC_DXF",
+    "geometry_glb_preview": "PASS_LOCAL_TRIMESH_4_11_1_GLTF2",
+    "pricing_market_sources": "DESIGNED_NOT_IMPLEMENTED",
+    "pricing_quantity_takeoff": "PASS_LOCAL_CONTRACT",
+    "readiness_current_head": "0009_PASS_LOCAL_SQLITE",
+    "pricing_authority_negative_tests": "PASS_LOCAL",
+    "official_price_source_live_runtime": "NOT_PROVEN"
+  },
+  "orkio": {
+    "first_deploy_mode": "disabled",
+    "real_m2m_wire": "NOT_PROVEN",
+    "realtime": "pending_external",
+    "voice": "pending_external",
+    "avatar": "pending_external"
+  },
+  "governance": {
+    "repository_write_executed": false,
+    "commit_executed": false,
+    "merge_executed": false,
+    "deploy_executed": false,
+    "migration_executed": false,
+    "human_approval_required": true
+  },
+  "fnd008": {
+    "classification": "CONCURRENT_LOCKOUT_LOST_UPDATE",
+    "patch": "SELECT FOR UPDATE + populate_existing on credential load",
+    "code_status": "PATCHED",
+    "real_postgres_status": "NOT_PROVEN"
+  },
+  "artifact_foundation": {
+    "document_formats": [
+      "docx",
+      "pdf",
+      "pptx",
+      "xlsx"
+    ],
+    "billing_scope": "glip",
+    "provider_profile_ref": "glip-local",
+    "storage_prefix": "glip",
+    "efata_credential_reuse": false
+  },
+  "architecture_foundation": {
+    "ifc_first_class": true,
+    "ifc_target": "IFC4.3 ADD2 / ISO 16739-1:2024",
+    "source_formats": [
+      "dwg",
+      "dxf",
+      "pdf",
+      "ifc",
+      "ifczip",
+      "ifcxml",
+      "glb",
+      "gltf"
+    ],
+    "semantic_parser_status": "IFC_ADAPTER_IMPLEMENTED_DXF_ADAPTER_IMPLEMENTED",
+    "render_worker_status": "NOT_IMPLEMENTED_GATE_4",
+    "ifcopenshell_target": "0.8.5",
+    "ifc_source_of_truth": true,
+    "semantic_worker_isolated": true,
+    "dxf_semantic_parser": "IMPLEMENTED_EZDXF",
+    "geometry_preview": "IMPLEMENTED_TRIMESH_LINEWORK_ONLY",
+    "authoritative_3d_geometry": "NOT_IMPLEMENTED",
+    "quantity_takeoff_schema": "glip.quantity-takeoff.v1"
+  },
+  "working_copy_base": {
+    "artifact": "GLIP-Backend-RC7-BASELINE-REGENERATED.zip",
+    "sha256": "031f18b7b32f3a5f9ee31041a0863026190422649a62b2e0659bc8b5f16b9204",
+    "baseline_tests": "165_PASS_LOCAL_REPRODUCED"
+  },
+  "pricing_intelligence": {
+    "quantity_takeoff": "IMPLEMENTED_FOUNDATION",
+    "price_source_registry": "IMPLEMENTED",
+    "official_source_contracts": "IMPLEMENTED_RUNTIME_NOT_PROVEN",
+    "official_numeric_authority": "SERVER_VERIFIED_ONLY",
+    "manual_supplier_quote_authority": "EXPLICIT_OWNER_APPROVAL_REQUIRED",
+    "professional_fee_mode": "IMPLEMENTED_OWNER_GATED",
+    "construction_cost_mode": "IMPLEMENTED_OWNER_GATED",
+    "actual_cost_evidence": "RESOLVED_TENANT_PROJECT_DOCUMENT_REQUIRED",
+    "llm_numeric_authority": false
+  }
+}
