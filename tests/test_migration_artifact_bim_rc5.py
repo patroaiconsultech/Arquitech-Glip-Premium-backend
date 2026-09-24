@@ -7,7 +7,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def test_rc5_artifact_bim_migration_is_linear_and_reversible():
     p=ROOT/"migrations/versions/0005_glip_artifact_bim_foundation.py"
     text=p.read_text(encoding="utf-8")
-    assert 'down_revision = "0004_glip_native_auth_rc4"' in text
+    assert 'down_revision = "0004a_alembic_version_128"' in text
     for table in (
         "artifact_jobs","artifact_assets","artifact_usage_events",
         "architectural_sources","architectural_scenes","render_jobs",
