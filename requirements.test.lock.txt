@@ -28,3 +28,19 @@ packaging==25.0
 pluggy==1.6.0
 Pygments==2.20.0
 pytest==9.0.2
+
+# G2 repaired test-runtime dependencies
+python-multipart==0.0.32
+reportlab==4.5.1
+python-pptx==1.0.2
+openpyxl==3.1.5
+pypdf==5.9.0
+
+# G2 repaired test-runtime dependencies
+defusedxml==0.7.1
+boto3==1.43.101
+
+# G2 geometry test-runtime dependencies
+ezdxf==1.4.4
+trimesh==4.11.1
+numpy==2.3.5
