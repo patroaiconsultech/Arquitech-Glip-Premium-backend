@@ -1,7 +1,7 @@
 """GLIP RC5 artifact + CAD/BIM foundation.
 
 Revision ID: 0005_glip_artifact_bim_foundation
-Revises: 0004_glip_native_auth_rc4
+Revises: 0004a_alembic_version_128
 
 Additive and reversible. Introduces GLIP-owned artifact jobs/assets/usage and
 architectural source/scene/render job records. No Efata storage, billing or
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "0005_glip_artifact_bim_foundation"
-down_revision = "0004_glip_native_auth_rc4"
+down_revision = "0004a_alembic_version_128"
 branch_labels = None
 depends_on = None
 
