@@ -9,13 +9,11 @@ from glip.native_auth import new_password_record, normalize_email, revoke_all_cr
 
 if os.getenv("GLIP_RESET_CONFIRM")!="YES":
     raise SystemExit("refusing: set GLIP_RESET_CONFIRM=YES")
-
 tenant_id=os.environ.get("GLIP_RESET_TENANT_ID","").strip()
 email=normalize_email(os.environ.get("GLIP_RESET_EMAIL",""))
 password=os.environ.get("GLIP_RESET_PASSWORD") or getpass.getpass("New GLIP native password: ")
 if not tenant_id or not email:
     raise SystemExit("tenant id and email are required")
-
 salt_b64,hash_b64=new_password_record(password)
 with SessionLocal() as db:
     credential=db.scalar(select(NativeCredential).where(
