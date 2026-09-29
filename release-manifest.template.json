@@ -4,7 +4,7 @@
   "repository": "TO_BE_CREATED",
   "commit": "TO_BE_CAPTURED",
   "environment": "staging",
-  "migration_head": "0009_glip_pricing_authority_hardening",
+  "migration_head": "0010_glip_project_lifecycle",
   "database": {
     "isolated": true,
     "schema": "glip"
@@ -13,7 +13,7 @@
   "deploy_executed": false,
   "human_approval_required": true,
   "external_delivery_enabled": false,
-  "candidate_label": "RC8_PRICING_AUTHORITY_HARDENING",
+  "candidate_label": "F01_PROJECT_LIFECYCLE",
   "auth_mode_target": "native_session",
   "runtime_dependency_lock": "requirements.lock.txt",
   "runtime_dependency_lock_scope": "exact runtime pins; fresh network install still required in CI/build",
@@ -71,5 +71,13 @@
     "construction_cost_engine": "IMPLEMENTED_OWNER_GATED",
     "actual_cost_evidence": "TENANT_PROJECT_DOCUMENT_COST_EVIDENCE_REQUIRED",
     "llm_numeric_authority": false
+  },
+  "project_lifecycle": {
+    "status": "PROPOSAL_CODE_LEVEL",
+    "idempotency_key_required": true,
+    "idempotency_scope": "tenant_actor",
+    "mutation_authorization": "ROLE_CAPABILITY_MINIMUM",
+    "archive_restore": "IMPLEMENTED_CODE_LEVEL",
+    "physical_delete": false
   }
 }

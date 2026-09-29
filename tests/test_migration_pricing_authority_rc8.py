@@ -17,4 +17,4 @@ def test_pricing_authority_migration_is_linear_additive_and_reversible():
     assert 'drop_column("authority_status")' in text
 
     script=ScriptDirectory.from_config(Config(str(ROOT/"alembic.ini")))
-    assert script.get_heads()==["0009_glip_pricing_authority_hardening"]
+    assert script.get_revision("0009_glip_pricing_authority_hardening") is not None

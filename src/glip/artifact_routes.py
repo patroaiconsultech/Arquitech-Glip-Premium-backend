@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from .auth import get_principal
 from .config import settings
-from .context import project_or_404
+from .context import project_or_404, mutable_project_or_409
 from .database import get_db
 from .models import (
     ArtifactAsset, ArtifactUsageEvent, ArchitecturalScene, ArchitecturalSource, BIMExtractionJob,
@@ -53,6 +53,7 @@ def list_artifacts(project_id:str,p=Depends(get_principal),db:Session=Depends(ge
 
 @router.post("/projects/{project_id}/artifacts/render",status_code=201)
 def render_artifact(project_id:str,body:dict,p=Depends(get_principal),db:Session=Depends(get_db)):
+    mutable_project_or_409(db,p.tenant_id,project_id)
     _require_artifacts_enabled()
     project_or_404(db,p.tenant_id,project_id)
     fmt=str(body.get("format") or "").strip().lower()
@@ -163,7 +164,7 @@ async def upload_architecture_source(
     p=Depends(get_principal),
     db:Session=Depends(get_db),
 ):
-    project_or_404(db,p.tenant_id,project_id)
+    mutable_project_or_409(db,p.tenant_id,project_id)
     if classification not in {"project_internal","confidential","client_shareable"}:
         raise HTTPException(422,"architecture_classification_invalid")
     row=None; duplicate=False
@@ -224,7 +225,7 @@ def architecture_bim_job(project_id:str,job_id:str,p=Depends(get_principal),db:S
 def queue_bim_semantic_extraction(
     project_id:str,source_id:str,p=Depends(get_principal),db:Session=Depends(get_db)
 ):
-    project_or_404(db,p.tenant_id,project_id)
+    mutable_project_or_409(db,p.tenant_id,project_id)
     source=db.scalar(select(ArchitecturalSource).where(
         ArchitecturalSource.id==source_id,
         ArchitecturalSource.tenant_id==p.tenant_id,
@@ -263,7 +264,7 @@ def architecture_scenes(project_id:str,p=Depends(get_principal),db:Session=Depen
 
 @router.post("/projects/{project_id}/architecture/scenes",status_code=201)
 def create_architecture_scene(project_id:str,body:dict,p=Depends(get_principal),db:Session=Depends(get_db)):
-    project_or_404(db,p.tenant_id,project_id)
+    mutable_project_or_409(db,p.tenant_id,project_id)
     source_id=str(body.get("source_id") or "").strip()
     source=db.scalar(select(ArchitecturalSource).where(
         ArchitecturalSource.id==source_id,
@@ -317,7 +318,7 @@ def architecture_cad_job(project_id:str,job_id:str,p=Depends(get_principal),db:S
 def queue_cad_semantic_extraction(
     project_id:str,source_id:str,p=Depends(get_principal),db:Session=Depends(get_db)
 ):
-    project_or_404(db,p.tenant_id,project_id)
+    mutable_project_or_409(db,p.tenant_id,project_id)
     source=db.scalar(select(ArchitecturalSource).where(
         ArchitecturalSource.id==source_id,
         ArchitecturalSource.tenant_id==p.tenant_id,
@@ -358,7 +359,7 @@ def architecture_geometry_jobs(project_id:str,p=Depends(get_principal),db:Sessio
 def queue_scene_geometry_build(
     project_id:str,scene_id:str,body:dict|None=None,p=Depends(get_principal),db:Session=Depends(get_db)
 ):
-    project_or_404(db,p.tenant_id,project_id)
+    mutable_project_or_409(db,p.tenant_id,project_id)
     scene=db.scalar(select(ArchitecturalScene).where(
         ArchitecturalScene.id==scene_id,
         ArchitecturalScene.tenant_id==p.tenant_id,

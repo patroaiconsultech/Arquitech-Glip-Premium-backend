@@ -1,6 +1,7 @@
 import os
 os.environ["GLIP_ENVIRONMENT"]="test";os.environ["GLIP_DATABASE_URL"]="sqlite://";os.environ["GLIP_AUTH_MODE"]="dev_headers";os.environ["GLIP_ORKIO_MODE"]="mock"
 import pytest
+from uuid import uuid4
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import sessionmaker
@@ -18,7 +19,19 @@ def client(db):
     def override_db():
         yield db
     app.dependency_overrides[get_db]=override_db
-    yield TestClient(app);app.dependency_overrides.clear()
+    test_client=TestClient(app)
+    original_post=test_client.post
+
+    def post(url,*args,**kwargs):
+        if url=="/api/v1/projects":
+            h=dict(kwargs.get("headers") or {})
+            h.setdefault("Idempotency-Key",str(uuid4()))
+            kwargs["headers"]=h
+        return original_post(url,*args,**kwargs)
+
+    test_client.post=post
+    yield test_client
+    app.dependency_overrides.clear()
 def provision(db,t,u):
     db.add(Tenant(id=t,name=t));db.add(Membership(tenant_id=t,external_subject=u,display_name=u,role="owner",active=True));db.commit()
 @pytest.fixture()

@@ -1,6 +1,6 @@
 from sqlalchemy import text
 
-EXPECTED_MIGRATION_HEAD="0009_glip_pricing_authority_hardening"
+EXPECTED_MIGRATION_HEAD="0010_glip_project_lifecycle"
 
 def database_readiness(engine, *, require_migration_head: bool) -> dict:
     checks={

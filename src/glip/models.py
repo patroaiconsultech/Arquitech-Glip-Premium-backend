@@ -100,6 +100,24 @@ class Project(Base):
     created_by: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+    archived_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    archived_by: Mapped[str|None] = mapped_column(String(255), nullable=True)
+
+class ProjectCreateIdempotency(Base):
+    __tablename__ = "project_create_idempotency"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id","actor_id","idempotency_key",
+            name="uq_project_create_idempotency",
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(String(64), index=True)
+    actor_id: Mapped[str] = mapped_column(String(255), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(200))
+    request_sha256: Mapped[str] = mapped_column(String(64))
+    project_id: Mapped[str] = mapped_column(String(64), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 class ProjectCognitiveProfile(Base):
     __tablename__ = "project_cognitive_profiles"

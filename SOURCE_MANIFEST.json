@@ -1,12 +1,12 @@
 {
   "product": "GLIP Platform Backend",
-  "candidate_label": "RC8_PRICING_AUTHORITY_HARDENING",
+  "candidate_label": "F01_PROJECT_LIFECYCLE",
   "version": "1.0.0rc8",
   "baseline": {
     "artifact": "GLIP-Backend-RC7-BASELINE-REGENERATED.zip",
     "sha256": "031f18b7b32f3a5f9ee31041a0863026190422649a62b2e0659bc8b5f16b9204"
   },
-  "migration_head": "0009_glip_pricing_authority_hardening",
+  "migration_head": "0010_glip_project_lifecycle",
   "auth": {
     "mode": "native_session",
     "oidc": false,
@@ -34,10 +34,10 @@
     "docker_base_digest_pinned": true
   },
   "checks": {
-    "compileall": "PASS_LOCAL",
-    "pytest": "185_PASS_LOCAL_RC8_AUTHORITY_HARDENING",
+    "compileall": "PASS_LOCAL_F01",
+    "pytest": "196_PASS_LOCAL_F01",
     "runtime_lock": "PASS_LOCAL_43",
-    "migration_smoke": "0008_0009_0008_0009_UP_DOWN_UP_PASS_LOCAL_SQLITE",
+    "migration_smoke": "0010_UP_DOWN_UP_PASS_LOCAL_SQLITE",
     "postgres_offline_ddl": "PASS_LOCAL",
     "real_postgres_runtime": "NOT_PROVEN",
     "fresh_network_docker_build": "NOT_PROVEN",
@@ -55,7 +55,7 @@
     "geometry_glb_preview": "PASS_LOCAL_TRIMESH_4_11_1_GLTF2",
     "pricing_market_sources": "DESIGNED_NOT_IMPLEMENTED",
     "pricing_quantity_takeoff": "PASS_LOCAL_CONTRACT",
-    "readiness_current_head": "0009_PASS_LOCAL_SQLITE",
+    "readiness_current_head": "0010_PASS_LOCAL_SQLITE",
     "pricing_authority_negative_tests": "PASS_LOCAL",
     "official_price_source_live_runtime": "NOT_PROVEN"
   },
@@ -130,5 +130,13 @@
     "construction_cost_mode": "IMPLEMENTED_OWNER_GATED",
     "actual_cost_evidence": "RESOLVED_TENANT_PROJECT_DOCUMENT_REQUIRED",
     "llm_numeric_authority": false
+  },
+  "project_lifecycle": {
+    "idempotency": "DURABLE_TENANT_ACTOR_KEY",
+    "mutation_authorization": "MINIMUM_CAPABILITY_MAP",
+    "edit": "IMPLEMENTED_CODE_LEVEL",
+    "archive_restore": "IMPLEMENTED_CODE_LEVEL",
+    "physical_delete": "NOT_IMPLEMENTED_BY_DESIGN",
+    "cross_tenant_negative_tests": "IMPLEMENTED_LOCAL_TEST"
   }
 }

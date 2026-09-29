@@ -69,7 +69,7 @@ def test_runtime_lock_contains_expected_pins():
 def test_bootstrap_is_explicit_and_has_no_account_linking():
     source=(ROOT/"scripts/bootstrap_membership.py").read_text()
     assert 'GLIP_BOOTSTRAP_CONFIRM' in source
-    assert '!="YES"' in source
+    assert "refusing: set GLIP_BOOTSTRAP_CONFIRM=YES" in source
     assert "credential already exists" in source
     assert "oidc" not in source.lower()
 
