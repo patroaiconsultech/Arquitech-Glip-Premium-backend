@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..auth import get_principal
-from ..context import project_or_404
+from ..context import project_or_404, mutable_project_or_409
 from ..database import get_db
 from ..models import (
     PriceSourceSnapshot,
@@ -110,7 +110,7 @@ def get_snapshot(snapshot_id: str, p=Depends(get_principal), db: Session = Depen
 
 @router.post("/projects/{project_id}/mappings", status_code=201)
 def create_mapping(project_id: str, body: dict, p=Depends(get_principal), db: Session = Depends(get_db)):
-    project_or_404(db, p.tenant_id, project_id)
+    mutable_project_or_409(db, p.tenant_id, project_id)
     try:
         obj = create_quantity_mapping(db, p.tenant_id, project_id, p.subject, body)
         db.commit()
@@ -123,7 +123,7 @@ def create_mapping(project_id: str, body: dict, p=Depends(get_principal), db: Se
 
 @router.post("/projects/{project_id}/mappings/{mapping_id}/approve", status_code=200)
 def approve_mapping(project_id: str, mapping_id: str, p=Depends(get_principal), db: Session = Depends(get_db)):
-    project_or_404(db, p.tenant_id, project_id)
+    mutable_project_or_409(db, p.tenant_id, project_id)
     try:
         obj = approve_quantity_mapping(
             db, p.tenant_id, project_id, p.subject, p.role, mapping_id
@@ -151,7 +151,7 @@ def list_mappings(project_id: str, p=Depends(get_principal), db: Session = Depen
 
 @router.post("/projects/{project_id}/estimates/construction", status_code=201)
 def construction_estimate(project_id: str, body: dict, p=Depends(get_principal), db: Session = Depends(get_db)):
-    project_or_404(db, p.tenant_id, project_id)
+    mutable_project_or_409(db, p.tenant_id, project_id)
     try:
         obj = estimate_construction(
             db,
@@ -175,7 +175,7 @@ def construction_estimate(project_id: str, body: dict, p=Depends(get_principal),
 
 @router.post("/projects/{project_id}/estimates/professional-fee", status_code=201)
 def professional_fee_estimate(project_id: str, body: dict, p=Depends(get_principal), db: Session = Depends(get_db)):
-    project_or_404(db, p.tenant_id, project_id)
+    mutable_project_or_409(db, p.tenant_id, project_id)
     try:
         obj = estimate_professional_fee(db, p.tenant_id, project_id, p.subject, p.role, body)
         db.commit()
@@ -201,7 +201,7 @@ def list_estimates(project_id: str, p=Depends(get_principal), db: Session = Depe
 
 @router.post("/projects/{project_id}/cost-ledger", status_code=201)
 def create_cost_event(project_id: str, body: dict, p=Depends(get_principal), db: Session = Depends(get_db)):
-    project_or_404(db, p.tenant_id, project_id)
+    mutable_project_or_409(db, p.tenant_id, project_id)
     try:
         obj = add_realized_cost(db, p.tenant_id, project_id, p.subject, p.role, body)
         db.commit()

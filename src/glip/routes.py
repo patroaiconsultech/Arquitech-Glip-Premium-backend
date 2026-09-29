@@ -1,17 +1,22 @@
 from uuid import uuid4
+import hashlib
+import json
 from datetime import datetime, timezone, timedelta
 from difflib import unified_diff
-from fastapi import APIRouter,Depends,Header,HTTPException
+from fastapi import APIRouter,Depends,Header,HTTPException,Response
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from .auth import get_principal,Principal
+from .authz import capabilities_for,require_capability
 from .database import get_db
 from .models import (
-    Client,Project,ProjectStage,Provider,ProjectProvider,Task,Milestone,ScheduleItem,BudgetSnapshot,
+    ProjectCognitiveProfile,
+    Client,Project,ProjectCreateIdempotency,ProjectStage,Provider,ProjectProvider,Task,Milestone,ScheduleItem,BudgetSnapshot,
     Draft,DraftVersion,ApprovalRequest,ApprovedVersion,ProjectKnowledgeItem,ProjectMemoryFact,
     MemoryCandidate,CognitiveExecution,OutboxEvent,Document,ProjectDecision,ProjectAsset,ProjectCommunication
 )
-from .context import project_or_404,build
+from .context import project_or_404,mutable_project_or_409,build
 from .services import summary,create_draft,add_version,request_approval,decide,ensure_cognitive_profile,approve_memory_candidate
 from .risk import scan
 from .audit import emit
@@ -43,7 +48,13 @@ def _cmp_dt(value):
 
 @router.get("/me")
 def me(p:Principal=Depends(get_principal)):
-    return {"subject":p.subject,"tenant_id":p.tenant_id,"role":p.role,"display_name":p.display_name}
+    return {
+        "subject":p.subject,
+        "tenant_id":p.tenant_id,
+        "role":p.role,
+        "display_name":p.display_name,
+        "capabilities":capabilities_for(p.role),
+    }
 
 @router.get("/clients")
 def clients(p=Depends(get_principal),db:Session=Depends(get_db)):
@@ -57,38 +68,287 @@ def create_client(body:dict,p=Depends(get_principal),db:Session=Depends(get_db))
     db.add(obj);db.commit();db.refresh(obj);return obj
 
 @router.get("/projects")
-def projects(p=Depends(get_principal),db:Session=Depends(get_db)):
-    return db.scalars(select(Project).where(Project.tenant_id==p.tenant_id).order_by(Project.updated_at.desc())).all()
+def projects(archived:bool=False,p=Depends(get_principal),db:Session=Depends(get_db)):
+    stmt=select(Project).where(Project.tenant_id==p.tenant_id)
+    if archived:
+        stmt=stmt.where(Project.archived_at.is_not(None))
+    else:
+        stmt=stmt.where(Project.archived_at.is_(None))
+    return db.scalars(stmt.order_by(Project.updated_at.desc())).all()
+
+def _project_create_payload(body:dict) -> dict:
+    return {
+        "name":str(body.get("name") or "").strip(),
+        "code":(str(body.get("code")).strip() if body.get("code") not in (None,"") else None),
+        "client_id":body.get("client_id"),
+        "description":body.get("description"),
+        "address_summary":body.get("address_summary"),
+    }
+
+def _canonical_sha256(value:dict) -> str:
+    raw=json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",",":"),
+        ensure_ascii=False,
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+def _existing_project_create(
+    db:Session,
+    p:Principal,
+    key:str,
+    request_sha256:str,
+    response:Response,
+):
+    existing=db.scalar(select(ProjectCreateIdempotency).where(
+        ProjectCreateIdempotency.tenant_id==p.tenant_id,
+        ProjectCreateIdempotency.actor_id==p.subject,
+        ProjectCreateIdempotency.idempotency_key==key,
+    ))
+    if existing is None:
+        return None
+    if existing.request_sha256!=request_sha256:
+        raise HTTPException(409,"idempotency_key_reused")
+    project=db.scalar(select(Project).where(
+        Project.id==existing.project_id,
+        Project.tenant_id==p.tenant_id,
+    ))
+    if project is None:
+        raise HTTPException(409,"idempotency_record_inconsistent")
+    response.headers["Idempotent-Replay"]="true"
+    return project
 
 @router.post("/projects",status_code=201)
-def create_project(body:dict,p=Depends(get_principal),db:Session=Depends(get_db)):
-    obj=Project(
-        tenant_id=p.tenant_id,name=str(body.get("name") or "").strip(),code=body.get("code"),
-        client_id=body.get("client_id"),description=body.get("description"),
-        address_summary=body.get("address_summary"),created_by=p.subject
-    )
-    if not obj.name: raise HTTPException(422,"name_required")
-    if obj.client_id and not db.scalar(select(Client).where(Client.id==obj.client_id,Client.tenant_id==p.tenant_id)):
+def create_project(
+    body:dict,
+    response:Response,
+    idempotency_key:str=Header(...,alias="Idempotency-Key"),
+    p:Principal=Depends(get_principal),
+    db:Session=Depends(get_db),
+):
+    require_capability(p,"project.create")
+    key=str(idempotency_key or "").strip()
+    if not key or len(key)>200:
+        raise HTTPException(422,"idempotency_key_invalid")
+
+    payload=_project_create_payload(body)
+    if not payload["name"]:
+        raise HTTPException(422,"name_required")
+    if len(payload["name"])>240:
+        raise HTTPException(422,"name_too_long")
+    if payload["code"] and len(payload["code"])>80:
+        raise HTTPException(422,"code_too_long")
+    if payload["client_id"] and not db.scalar(select(Client).where(
+        Client.id==payload["client_id"],
+        Client.tenant_id==p.tenant_id,
+    )):
         raise HTTPException(400,"client_not_found")
-    db.add(obj);db.flush()
+
+    request_sha256=_canonical_sha256(payload)
+    replay=_existing_project_create(db,p,key,request_sha256,response)
+    if replay is not None:
+        return replay
+
+    project_id=str(uuid4())
+    obj=Project(
+        id=project_id,
+        tenant_id=p.tenant_id,
+        name=payload["name"],
+        code=payload["code"],
+        client_id=payload["client_id"],
+        description=payload["description"],
+        address_summary=payload["address_summary"],
+        created_by=p.subject,
+    )
+    idem=ProjectCreateIdempotency(
+        tenant_id=p.tenant_id,
+        actor_id=p.subject,
+        idempotency_key=key,
+        request_sha256=request_sha256,
+        project_id=project_id,
+    )
+    db.add_all([obj,idem])
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        replay=_existing_project_create(db,p,key,request_sha256,response)
+        if replay is not None:
+            return replay
+        raise HTTPException(409,"project_conflict")
+
     profile=ensure_cognitive_profile(db,p.tenant_id,obj.id)
-    emit(db,tenant_id=p.tenant_id,project_id=obj.id,actor_id=p.subject,event_type="project.created",
-         payload={"cognitive_profile_id":profile.id})
-    db.commit();db.refresh(obj);return obj
+    emit(
+        db,
+        tenant_id=p.tenant_id,
+        project_id=obj.id,
+        actor_id=p.subject,
+        event_type="project.created",
+        payload={"cognitive_profile_id":profile.id},
+    )
+    db.commit()
+    db.refresh(obj)
+    return obj
 
 @router.get("/projects/{project_id}")
 def get_project(project_id:str,p=Depends(get_principal),db:Session=Depends(get_db)):
     return project_or_404(db,p.tenant_id,project_id)
 
+@router.patch("/projects/{project_id}")
+def update_project(
+    project_id:str,
+    body:dict,
+    p:Principal=Depends(get_principal),
+    db:Session=Depends(get_db),
+):
+    require_capability(p,"project.update")
+    project=project_or_404(db,p.tenant_id,project_id)
+    if project.archived_at is not None:
+        raise HTTPException(409,"project_archived")
+
+    allowed={"name","code","client_id","description","address_summary","status"}
+    unknown=set(body)-allowed
+    if unknown:
+        raise HTTPException(422,"unsupported_project_fields")
+    if not body:
+        raise HTTPException(422,"project_patch_empty")
+
+    changed=[]
+    if "name" in body:
+        name=str(body.get("name") or "").strip()
+        if not name:
+            raise HTTPException(422,"name_required")
+        if len(name)>240:
+            raise HTTPException(422,"name_too_long")
+        if project.name!=name:
+            project.name=name
+            changed.append("name")
+
+    if "code" in body:
+        code=str(body.get("code") or "").strip() or None
+        if code and len(code)>80:
+            raise HTTPException(422,"code_too_long")
+        if code:
+            conflict=db.scalar(select(Project).where(
+                Project.tenant_id==p.tenant_id,
+                Project.code==code,
+                Project.id!=project.id,
+            ))
+            if conflict:
+                raise HTTPException(409,"project_code_conflict")
+        if project.code!=code:
+            project.code=code
+            changed.append("code")
+
+    if "client_id" in body:
+        client_id=body.get("client_id") or None
+        if client_id and not db.scalar(select(Client).where(
+            Client.id==client_id,
+            Client.tenant_id==p.tenant_id,
+        )):
+            raise HTTPException(400,"client_not_found")
+        if project.client_id!=client_id:
+            project.client_id=client_id
+            changed.append("client_id")
+
+    for field in ("description","address_summary"):
+        if field in body and getattr(project,field)!=body.get(field):
+            setattr(project,field,body.get(field))
+            changed.append(field)
+
+    if "status" in body:
+        status=str(body.get("status") or "").strip()
+        if not status:
+            raise HTTPException(422,"status_required")
+        if len(status)>32:
+            raise HTTPException(422,"status_too_long")
+        if project.status!=status:
+            project.status=status
+            changed.append("status")
+
+    if changed:
+        project.context_version+=1
+        emit(
+            db,
+            tenant_id=p.tenant_id,
+            project_id=project.id,
+            actor_id=p.subject,
+            event_type="project.updated",
+            payload={"fields":sorted(changed)},
+        )
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            raise HTTPException(409,"project_conflict") from exc
+        db.refresh(project)
+    return project
+
+@router.post("/projects/{project_id}/archive")
+def archive_project(
+    project_id:str,
+    p:Principal=Depends(get_principal),
+    db:Session=Depends(get_db),
+):
+    require_capability(p,"project.archive")
+    project=project_or_404(db,p.tenant_id,project_id)
+    if project.archived_at is None:
+        project.archived_at=datetime.now(timezone.utc)
+        project.archived_by=p.subject
+        project.context_version+=1
+        emit(
+            db,
+            tenant_id=p.tenant_id,
+            project_id=project.id,
+            actor_id=p.subject,
+            event_type="project.archived",
+        )
+        db.commit()
+        db.refresh(project)
+    return project
+
+@router.post("/projects/{project_id}/restore")
+def restore_project(
+    project_id:str,
+    p:Principal=Depends(get_principal),
+    db:Session=Depends(get_db),
+):
+    require_capability(p,"project.restore")
+    project=project_or_404(db,p.tenant_id,project_id)
+    if project.archived_at is not None:
+        project.archived_at=None
+        project.archived_by=None
+        project.context_version+=1
+        emit(
+            db,
+            tenant_id=p.tenant_id,
+            project_id=project.id,
+            actor_id=p.subject,
+            event_type="project.restored",
+        )
+        db.commit()
+        db.refresh(project)
+    return project
+
 @router.get("/projects/{project_id}/cognitive-profile")
 def cognitive_profile(project_id:str,p=Depends(get_principal),db:Session=Depends(get_db)):
-    project_or_404(db,p.tenant_id,project_id)
+    project=project_or_404(db,p.tenant_id,project_id)
+    profile=db.scalar(select(ProjectCognitiveProfile).where(
+        ProjectCognitiveProfile.tenant_id==p.tenant_id,
+        ProjectCognitiveProfile.project_id==project_id,
+    ))
+    if profile is not None:
+        return profile
+    if project.archived_at is not None:
+        raise HTTPException(404,"cognitive_profile_not_found")
     profile=ensure_cognitive_profile(db,p.tenant_id,project_id)
     db.commit();return profile
 
 @router.post("/projects/{project_id}/stages",status_code=201)
 def create_stage(project_id:str,body:dict,p=Depends(get_principal),db:Session=Depends(get_db)):
-    project=project_or_404(db,p.tenant_id,project_id)
+    project=mutable_project_or_409(db,p.tenant_id,project_id)
     name=str(body.get("name") or "").strip()
     if not name: raise HTTPException(422,"name_required")
     obj=ProjectStage(tenant_id=p.tenant_id,project_id=project_id,name=name,
@@ -110,7 +370,7 @@ def create_provider(body:dict,p=Depends(get_principal),db:Session=Depends(get_db
 
 @router.post("/projects/{project_id}/providers/{provider_id}",status_code=201)
 def link_provider(project_id:str,provider_id:str,body:dict|None=None,p=Depends(get_principal),db:Session=Depends(get_db)):
-    project=project_or_404(db,p.tenant_id,project_id)
+    project=mutable_project_or_409(db,p.tenant_id,project_id)
     provider=db.scalar(select(Provider).where(Provider.id==provider_id,Provider.tenant_id==p.tenant_id,Provider.active.is_(True)))
     if not provider: raise HTTPException(404,"provider_not_found")
     existing=db.scalar(select(ProjectProvider).where(
@@ -122,7 +382,7 @@ def link_provider(project_id:str,provider_id:str,body:dict|None=None,p=Depends(g
 
 @router.post("/projects/{project_id}/tasks",status_code=201)
 def create_task(project_id:str,body:dict,p=Depends(get_principal),db:Session=Depends(get_db)):
-    project=project_or_404(db,p.tenant_id,project_id)
+    project=mutable_project_or_409(db,p.tenant_id,project_id)
     title=str(body.get("title") or "").strip()
     if not title: raise HTTPException(422,"title_required")
     obj=Task(tenant_id=p.tenant_id,project_id=project_id,title=title,status=str(body.get("status") or "open"),due_at=_dt(body.get("due_at")))
@@ -130,7 +390,7 @@ def create_task(project_id:str,body:dict,p=Depends(get_principal),db:Session=Dep
 
 @router.post("/projects/{project_id}/milestones",status_code=201)
 def create_milestone(project_id:str,body:dict,p=Depends(get_principal),db:Session=Depends(get_db)):
-    project=project_or_404(db,p.tenant_id,project_id)
+    project=mutable_project_or_409(db,p.tenant_id,project_id)
     title=str(body.get("title") or "").strip()
     if not title: raise HTTPException(422,"title_required")
     obj=Milestone(tenant_id=p.tenant_id,project_id=project_id,title=title,status=str(body.get("status") or "planned"),due_at=_dt(body.get("due_at")))
@@ -138,7 +398,7 @@ def create_milestone(project_id:str,body:dict,p=Depends(get_principal),db:Sessio
 
 @router.post("/projects/{project_id}/schedule",status_code=201)
 def create_schedule(project_id:str,body:dict,p=Depends(get_principal),db:Session=Depends(get_db)):
-    project=project_or_404(db,p.tenant_id,project_id)
+    project=mutable_project_or_409(db,p.tenant_id,project_id)
     title=str(body.get("title") or "").strip()
     if not title: raise HTTPException(422,"title_required")
     obj=ScheduleItem(
@@ -157,7 +417,7 @@ def list_schedule(project_id:str,p=Depends(get_principal),db:Session=Depends(get
 
 @router.post("/projects/{project_id}/budgets",status_code=201)
 def create_budget(project_id:str,body:dict,p=Depends(get_principal),db:Session=Depends(get_db)):
-    project=project_or_404(db,p.tenant_id,project_id)
+    project=mutable_project_or_409(db,p.tenant_id,project_id)
     amount=int(body.get("amount_cents") or 0)
     if amount < 0: raise HTTPException(422,"amount_cents_must_be_nonnegative")
     # V0.5 never auto-approves financial data. Every new snapshot starts as draft.
@@ -177,7 +437,7 @@ def budgets(project_id:str,p=Depends(get_principal),db:Session=Depends(get_db)):
 
 @router.post("/projects/{project_id}/knowledge",status_code=201)
 def create_knowledge(project_id:str,body:dict,p=Depends(get_principal),db:Session=Depends(get_db)):
-    project=project_or_404(db,p.tenant_id,project_id)
+    project=mutable_project_or_409(db,p.tenant_id,project_id)
     key=str(body.get("knowledge_key") or "").strip()
     summary=str(body.get("summary") or "").strip()
     source_ref=str(body.get("source_ref") or "").strip()
@@ -214,7 +474,7 @@ def memory_candidates(project_id:str,p=Depends(get_principal),db:Session=Depends
 
 @router.post("/projects/{project_id}/memory/candidates/{candidate_id}/promote",status_code=201)
 def promote_memory(project_id:str,candidate_id:str,body:dict,p=Depends(get_principal),db:Session=Depends(get_db)):
-    project=project_or_404(db,p.tenant_id,project_id)
+    project=mutable_project_or_409(db,p.tenant_id,project_id)
     fact=approve_memory_candidate(
         db,p.tenant_id,project_id,candidate_id,p.subject,
         str(body.get("fact_key") or ""),str(body.get("fact_value") or ""),
@@ -242,6 +502,7 @@ def cap_risk(project_id:str,body:dict,p=Depends(get_principal),db:Session=Depend
 @router.post("/projects/{project_id}/capabilities/draft-message")
 def cap_draft(project_id:str,body:dict,x_request_id:str|None=Header(None),x_correlation_id:str|None=Header(None),
               p=Depends(get_principal),db:Session=Depends(get_db)):
+    mutable_project_or_409(db,p.tenant_id,project_id)
     request_id=x_request_id or str(uuid4());correlation_id=_corr(x_correlation_id)
     out=create_draft(db,p.tenant_id,project_id,p.subject,request_id,correlation_id,body)
     replay=bool(out.pop("_idempotent_replay",False))
@@ -282,17 +543,20 @@ def draft_diff(project_id:str,draft_id:str,p=Depends(get_principal),db:Session=D
 
 @router.post("/projects/{project_id}/drafts/{draft_id}/versions",status_code=201)
 def edit(project_id:str,draft_id:str,body:dict,p=Depends(get_principal),db:Session=Depends(get_db)):
+    mutable_project_or_409(db,p.tenant_id,project_id)
     version=add_version(db,p.tenant_id,project_id,draft_id,p.subject,str(body.get("content") or ""))
     db.commit();db.refresh(version);return version
 
 @router.post("/projects/{project_id}/drafts/{draft_id}/request-approval")
 def request(project_id:str,draft_id:str,body:dict,p=Depends(get_principal),db:Session=Depends(get_db)):
+    mutable_project_or_409(db,p.tenant_id,project_id)
     req=request_approval(db,p.tenant_id,project_id,draft_id,str(body.get("draft_version_id") or ""),p.subject)
     db.commit();db.refresh(req);return req
 
 @router.post("/projects/{project_id}/drafts/{draft_id}/approve")
 def approve(project_id:str,draft_id:str,body:dict,x_correlation_id:str|None=Header(None),
             p=Depends(get_principal),db:Session=Depends(get_db)):
+    mutable_project_or_409(db,p.tenant_id,project_id)
     decision,approved,candidate=decide(
         db,p.tenant_id,project_id,draft_id,str(body.get("draft_version_id") or ""),
         p.subject,"approved",body.get("reason"),_corr(x_correlation_id)
@@ -305,6 +569,7 @@ def approve(project_id:str,draft_id:str,body:dict,x_correlation_id:str|None=Head
 
 @router.post("/projects/{project_id}/drafts/{draft_id}/reject")
 def reject(project_id:str,draft_id:str,body:dict,p=Depends(get_principal),db:Session=Depends(get_db)):
+    mutable_project_or_409(db,p.tenant_id,project_id)
     decision,_,_=decide(db,p.tenant_id,project_id,draft_id,str(body.get("draft_version_id") or ""),p.subject,"rejected",body.get("reason"))
     db.commit();return {"status":"rejected","approval_decision_id":decision.id}
 
@@ -418,7 +683,7 @@ def documents(project_id:str,p=Depends(get_principal),db:Session=Depends(get_db)
 
 @router.post("/projects/{project_id}/documents",status_code=201)
 def create_document(project_id:str,body:dict,p=Depends(get_principal),db:Session=Depends(get_db)):
-    project=project_or_404(db,p.tenant_id,project_id)
+    project=mutable_project_or_409(db,p.tenant_id,project_id)
     name=str(body.get("name") or "").strip()
     storage_ref=str(body.get("storage_ref") or "").strip()
     if not name or not storage_ref:
@@ -441,7 +706,7 @@ def decisions(project_id:str,p=Depends(get_principal),db:Session=Depends(get_db)
 
 @router.post("/projects/{project_id}/decisions",status_code=201)
 def create_decision(project_id:str,body:dict,p=Depends(get_principal),db:Session=Depends(get_db)):
-    project=project_or_404(db,p.tenant_id,project_id)
+    project=mutable_project_or_409(db,p.tenant_id,project_id)
     title=str(body.get("title") or "").strip()
     if not title: raise HTTPException(422,"title_required")
     obj=ProjectDecision(
@@ -462,7 +727,7 @@ def assets(project_id:str,p=Depends(get_principal),db:Session=Depends(get_db)):
 
 @router.post("/projects/{project_id}/assets",status_code=201)
 def create_asset(project_id:str,body:dict,p=Depends(get_principal),db:Session=Depends(get_db)):
-    project=project_or_404(db,p.tenant_id,project_id)
+    project=mutable_project_or_409(db,p.tenant_id,project_id)
     name=str(body.get("name") or "").strip()
     storage_ref=str(body.get("storage_ref") or "").strip()
     asset_type=str(body.get("asset_type") or "media").strip()
@@ -491,7 +756,7 @@ def communications(project_id:str,p=Depends(get_principal),db:Session=Depends(ge
 
 @router.post("/projects/{project_id}/communications",status_code=201)
 def create_communication(project_id:str,body:dict,p=Depends(get_principal),db:Session=Depends(get_db)):
-    project=project_or_404(db,p.tenant_id,project_id)
+    project=mutable_project_or_409(db,p.tenant_id,project_id)
     summary=str(body.get("summary") or "").strip()
     if not summary: raise HTTPException(422,"summary_required")
     obj=ProjectCommunication(

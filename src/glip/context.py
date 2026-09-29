@@ -13,6 +13,12 @@ def project_or_404(db, tenant_id: str, project_id: str) -> Project:
         raise HTTPException(404,"project_not_found")
     return project
 
+def mutable_project_or_409(db, tenant_id: str, project_id: str) -> Project:
+    project = project_or_404(db, tenant_id, project_id)
+    if project.archived_at is not None:
+        raise HTTPException(409, "project_archived")
+    return project
+
 def _purpose_allowed(allowed: list, purpose: str) -> bool:
     return not allowed or purpose in allowed or "*" in allowed
 
