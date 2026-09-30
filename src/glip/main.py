@@ -6,10 +6,10 @@ from .routes import router
 from .auth_routes import router as auth_router
 from .artifact_routes import router as artifact_router
 from .pricing.routes import router as pricing_router
+from .chat_routes import router as chat_router
 from .capabilities import CAPABILITIES
 from .database import engine
 from .readiness import database_readiness
-
 app=FastAPI(
     title="GLIP Platform Backend",
     version="1.0.0rc8",
@@ -26,14 +26,12 @@ app.add_middleware(
     ],
     expose_headers=["X-Request-ID","X-Correlation-ID"],
 )
-
 @app.middleware("http")
 async def request_context(request:Request,call_next):
     request_id=request.headers.get("X-Request-ID") or str(uuid.uuid4())
     correlation_id=request.headers.get("X-Correlation-ID") or request_id
     request.state.request_id=request_id
     request.state.correlation_id=correlation_id
-
     if (
         settings.auth_mode=="native_session"
         and request.method in {"POST","PUT","PATCH","DELETE"}
@@ -46,7 +44,6 @@ async def request_context(request:Request,call_next):
             blocked.headers["X-Request-ID"]=request_id
             blocked.headers["X-Correlation-ID"]=correlation_id
             return blocked
-
     response=await call_next(request)
     response.headers["X-Request-ID"]=request_id
     response.headers["X-Correlation-ID"]=correlation_id
@@ -57,14 +54,12 @@ async def request_context(request:Request,call_next):
     if settings.environment=="production":
         response.headers["Strict-Transport-Security"]="max-age=31536000; includeSubDomains"
     return response
-
 @app.get("/health/live")
 def live():
     return {
         "status":"ok","service":"glip-backend","version":app.version,
         "release_id":settings.release_id
     }
-
 @app.get("/health/ready")
 def ready(response:Response):
     db_checks=database_readiness(
@@ -99,7 +94,6 @@ def ready(response:Response):
             "avatar":settings.avatar_mode,
         }
     }
-
 @app.get("/api/v1/capabilities")
 def capabilities():
     return {"schema_version":"glip.capability-registry.v1","items":CAPABILITIES}
@@ -108,3 +102,4 @@ app.include_router(auth_router)
 app.include_router(router)
 app.include_router(artifact_router)
 app.include_router(pricing_router)
+app.include_router(chat_router)
