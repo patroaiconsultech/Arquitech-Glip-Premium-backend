@@ -7,6 +7,8 @@ from .auth_routes import router as auth_router
 from .artifact_routes import router as artifact_router
 from .pricing.routes import router as pricing_router
 from .chat_routes import router as chat_router
+from .admin_routes import router as admin_router
+from .invitation_routes import router as invitation_router
 from .capabilities import CAPABILITIES
 from .database import engine
 from .readiness import database_readiness
@@ -97,9 +99,10 @@ def ready(response:Response):
 @app.get("/api/v1/capabilities")
 def capabilities():
     return {"schema_version":"glip.capability-registry.v1","items":CAPABILITIES}
-
 app.include_router(auth_router)
 app.include_router(router)
 app.include_router(artifact_router)
 app.include_router(pricing_router)
 app.include_router(chat_router)
+app.include_router(admin_router)
+app.include_router(invitation_router)
