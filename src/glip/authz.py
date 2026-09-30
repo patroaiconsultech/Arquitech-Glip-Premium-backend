@@ -12,18 +12,9 @@ PROJECT_CAPABILITIES = frozenset({
     "project.restore",
 })
 
-ACCESS_CAPABILITIES = frozenset({
-    "membership.list",
-    "membership.invite",
-    "invitation.list",
-    "invitation.rotate",
-    "invitation.reissue",
-    "invitation.revoke",
-})
-
 ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
-    "owner": PROJECT_CAPABILITIES | ACCESS_CAPABILITIES,
-    "admin": PROJECT_CAPABILITIES | ACCESS_CAPABILITIES,
+    "owner": PROJECT_CAPABILITIES,
+    "admin": PROJECT_CAPABILITIES,
     "architect": frozenset({"project.create", "project.update"}),
     "member": frozenset({"project.create", "project.update"}),
 }
