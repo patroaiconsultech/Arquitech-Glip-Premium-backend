@@ -6,7 +6,7 @@
     "artifact": "GLIP-Backend-RC7-BASELINE-REGENERATED.zip",
     "sha256": "031f18b7b32f3a5f9ee31041a0863026190422649a62b2e0659bc8b5f16b9204"
   },
-  "migration_head": "0010_glip_project_lifecycle",
+  "migration_head": "0012_glip_invitation_access",
   "auth": {
     "mode": "native_session",
     "oidc": false,

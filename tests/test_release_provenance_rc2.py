@@ -25,7 +25,7 @@ def test_current_package_release_readiness_and_alembic_head_are_aligned():
     assert release["migration_head"]==EXPECTED_MIGRATION_HEAD
     assert source["migration_head"]==EXPECTED_MIGRATION_HEAD
     assert source["candidate_label"]==release["candidate_label"]
-    assert EXPECTED_MIGRATION_HEAD=="0010_glip_project_lifecycle"
+    assert EXPECTED_MIGRATION_HEAD=="0012_glip_invitation_access"
 
 
 def test_release_template_keeps_orkio_contract_versioned_without_runtime_claim():

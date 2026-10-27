@@ -4,7 +4,7 @@
   "repository": "TO_BE_CREATED",
   "commit": "TO_BE_CAPTURED",
   "environment": "staging",
-  "migration_head": "0010_glip_project_lifecycle",
+  "migration_head": "0012_glip_invitation_access",
   "database": {
     "isolated": true,
     "schema": "glip"

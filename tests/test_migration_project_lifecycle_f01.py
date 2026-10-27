@@ -20,4 +20,7 @@ def test_f01_project_lifecycle_migration_is_linear_additive_and_reversible():
     assert 'batch.drop_column("archived_at")' in text
 
     script=ScriptDirectory.from_config(Config(str(ROOT/"alembic.ini")))
-    assert script.get_heads()==["0010_glip_project_lifecycle"]
+    assert script.get_revision("0010_glip_project_lifecycle").down_revision=="0009_glip_pricing_authority_hardening"
+    assert script.get_revision("0011_glip_chat_mvp").down_revision=="0010_glip_project_lifecycle"
+    assert script.get_revision("0012_glip_invitation_access").down_revision=="0011_glip_chat_mvp"
+    assert script.get_heads()==["0012_glip_invitation_access"]

@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .routes import router
 from .auth_routes import router as auth_router
+from .admin_routes import router as admin_router
+from .invitation_routes import router as invitation_router
 from .artifact_routes import router as artifact_router
 from .pricing.routes import router as pricing_router
 from .chat_routes import router as chat_router
@@ -99,6 +101,8 @@ def capabilities():
     return {"schema_version":"glip.capability-registry.v1","items":CAPABILITIES}
 
 app.include_router(auth_router)
+app.include_router(admin_router)
+app.include_router(invitation_router)
 app.include_router(router)
 app.include_router(artifact_router)
 app.include_router(pricing_router)
