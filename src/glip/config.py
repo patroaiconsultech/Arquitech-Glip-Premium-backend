@@ -57,6 +57,15 @@ class Settings(BaseSettings):
     artifact_provider_profile_ref: str = "glip-local"
     max_artifact_bytes: int = 50_000_000
 
+    # Visual AI is opt-in; uploads and image edits reuse the artifact blob store.
+    # The image provider runs in a separate worker, never inside an API request.
+    visual_ai_enabled: bool = False
+    visual_ai_provider: str = "disabled"  # disabled | openai
+    visual_ai_openai_api_key: str = ""
+    visual_ai_model: str = "gpt-image-2.5-sunburst"
+    visual_ai_max_input_bytes: int = 8_000_000
+    visual_ai_max_daily_edits: int = 10
+
     # Architectural source foundation. IFC is first-class and remains the
     # semantic source of truth; GLB/glTF is a derived distribution/render format.
     architecture_uploads_enabled: bool = False
@@ -178,6 +187,20 @@ class Settings(BaseSettings):
             raise ValueError("orkio_execution_lease_too_long")
 
 
+        if self.visual_ai_provider not in {"disabled", "openai"}:
+            raise ValueError("visual_ai_provider_invalid")
+        if not 1_000_000 <= self.visual_ai_max_input_bytes <= 20_000_000:
+            raise ValueError("visual_ai_max_input_bytes_invalid")
+        if not 1 <= self.visual_ai_max_daily_edits <= 100:
+            raise ValueError("visual_ai_daily_quota_invalid")
+        if self.visual_ai_enabled and self.environment == "production":
+            if self.artifact_storage_backend != "s3" or not self.artifact_storage_bucket.strip():
+                raise ValueError("visual_ai_requires_durable_s3_in_production")
+        if self.visual_ai_enabled and self.visual_ai_provider == "openai":
+            if not self.visual_ai_openai_api_key.strip():
+                raise ValueError("visual_ai_openai_api_key_required")
+            if not self.visual_ai_model.startswith("gpt-image-"):
+                raise ValueError("visual_ai_model_invalid")
         if self.artifact_storage_backend not in {"local","s3"}:
             raise ValueError("artifact_storage_backend_invalid")
         if self.artifact_storage_sse not in {"AES256","aws:kms"}:

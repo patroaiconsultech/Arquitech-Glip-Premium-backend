@@ -9,6 +9,7 @@ from .invitation_routes import router as invitation_router
 from .artifact_routes import router as artifact_router
 from .pricing.routes import router as pricing_router
 from .chat_routes import router as chat_router
+from .visual_ai_routes import router as visual_ai_router
 from .capabilities import CAPABILITIES
 from .database import engine
 from .readiness import database_readiness
@@ -107,3 +108,4 @@ app.include_router(router)
 app.include_router(artifact_router)
 app.include_router(pricing_router)
 app.include_router(chat_router)
+app.include_router(visual_ai_router)
