@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     artifact_storage_endpoint_url: str | None = None
     artifact_storage_access_key_id: str = ""
     artifact_storage_secret_access_key: str = ""
-    artifact_storage_sse: str = "AES256"  # AES256 | aws:kms
+    artifact_storage_sse: str = "AES256"  # AES256 | aws:kms | provider_managed (Railway Buckets only)
     artifact_storage_kms_key_id: str = ""
     artifact_storage_prefix: str = "glip"
     artifact_provider_profile_ref: str = "glip-local"
@@ -206,8 +206,22 @@ class Settings(BaseSettings):
                 raise ValueError("visual_ai_model_invalid")
         if self.artifact_storage_backend not in {"local","s3"}:
             raise ValueError("artifact_storage_backend_invalid")
-        if self.artifact_storage_sse not in {"AES256","aws:kms"}:
+        if self.artifact_storage_sse not in {"AES256", "aws:kms", "provider_managed"}:
             raise ValueError("artifact_storage_sse_invalid")
+        if self.artifact_storage_sse == "provider_managed":
+            # Railway Buckets are encrypted at rest by the platform, but do not
+            # support the S3 ServerSideEncryption request header. Do not allow
+            # silent removal of that header for arbitrary S3-compatible stores.
+            from urllib.parse import urlsplit
+            endpoint = urlsplit(self.artifact_storage_endpoint_url or "")
+            hostname = (endpoint.hostname or "").lower()
+            if (
+                endpoint.scheme != "https"
+                or not hostname.endswith(".storageapi.dev")
+                or endpoint.username is not None
+                or endpoint.password is not None
+            ):
+                raise ValueError("provider_managed_requires_railway_bucket_endpoint")
         if self.chat_attachment_max_bytes < 100_000 or self.chat_attachment_max_bytes > 8_000_000:
             raise ValueError("chat_attachment_max_bytes_invalid")
         if self.max_artifact_bytes < 1_000_000 or self.max_artifact_bytes > 500_000_000:

@@ -165,8 +165,9 @@ class S3BlobStorage:
                 "Key": object_key,
                 "Body": data,
                 "ContentType": content_type,
-                "ServerSideEncryption": self.server_side_encryption,
             }
+            if self.server_side_encryption != "provider_managed":
+                put_kwargs["ServerSideEncryption"] = self.server_side_encryption
             if self.server_side_encryption == "aws:kms":
                 put_kwargs["SSEKMSKeyId"] = self.kms_key_id
             client.put_object(**put_kwargs)
@@ -185,10 +186,9 @@ class S3BlobStorage:
             error_code = str((response.get("Error") or {}).get("Code") or "")
             if error_code not in {"404", "NoSuchKey", "NotFound"}:
                 raise BlobStorageError("BLOB_HEAD_FAILED") from exc
-        extra_args = {
-            "ContentType": content_type,
-            "ServerSideEncryption": self.server_side_encryption,
-        }
+        extra_args = {"ContentType": content_type}
+        if self.server_side_encryption != "provider_managed":
+            extra_args["ServerSideEncryption"] = self.server_side_encryption
         if self.server_side_encryption == "aws:kms":
             extra_args["SSEKMSKeyId"] = self.kms_key_id
         try:
