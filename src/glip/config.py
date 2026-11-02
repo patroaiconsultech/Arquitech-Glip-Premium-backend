@@ -56,7 +56,6 @@ class Settings(BaseSettings):
     artifact_storage_prefix: str = "glip"
     artifact_provider_profile_ref: str = "glip-local"
     max_artifact_bytes: int = 50_000_000
-
     # Visual AI is opt-in; uploads and image edits reuse the artifact blob store.
     # The image provider runs in a separate worker, never inside an API request.
     visual_ai_enabled: bool = False
@@ -65,6 +64,10 @@ class Settings(BaseSettings):
     visual_ai_model: str = "gpt-image-2.5-sunburst"
     visual_ai_max_input_bytes: int = 8_000_000
     visual_ai_max_daily_edits: int = 10
+
+    # Chat attachments are opt-in; no migration, data stored in ArtifactAsset.
+    chat_attachments_enabled: bool = False
+    chat_attachment_max_bytes: int = 8_000_000
 
     # Architectural source foundation. IFC is first-class and remains the
     # semantic source of truth; GLB/glTF is a derived distribution/render format.
@@ -205,6 +208,8 @@ class Settings(BaseSettings):
             raise ValueError("artifact_storage_backend_invalid")
         if self.artifact_storage_sse not in {"AES256","aws:kms"}:
             raise ValueError("artifact_storage_sse_invalid")
+        if self.chat_attachment_max_bytes < 100_000 or self.chat_attachment_max_bytes > 8_000_000:
+            raise ValueError("chat_attachment_max_bytes_invalid")
         if self.max_artifact_bytes < 1_000_000 or self.max_artifact_bytes > 500_000_000:
             raise ValueError("max_artifact_bytes_invalid")
         if self.max_architectural_source_bytes < 10_000_000 or self.max_architectural_source_bytes > 2_000_000_000:
@@ -236,7 +241,7 @@ class Settings(BaseSettings):
         if self.geometry_build_enabled and not self.architecture_uploads_enabled:
             raise ValueError("geometry_build_requires_architecture_uploads")
         artifact_or_arch_enabled = (
-            self.artifacts_enabled or self.architecture_uploads_enabled or self.bim_semantic_enabled
+            self.artifacts_enabled or self.chat_attachments_enabled or self.architecture_uploads_enabled or self.bim_semantic_enabled
             or self.cad_semantic_enabled or self.geometry_build_enabled
         )
         if artifact_or_arch_enabled:

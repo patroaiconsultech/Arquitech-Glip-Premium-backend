@@ -48,6 +48,7 @@ def list_artifacts(project_id:str,p=Depends(get_principal),db:Session=Depends(ge
     return db.scalars(select(ArtifactAsset).where(
         ArtifactAsset.tenant_id==p.tenant_id,
         ArtifactAsset.project_id==project_id,
+        ArtifactAsset.artifact_kind!="chat_attachment",
     ).order_by(ArtifactAsset.created_at.desc())).all()
 
 
@@ -109,6 +110,7 @@ def download_artifact(project_id:str,artifact_id:str,p=Depends(get_principal),db
         ArtifactAsset.id==artifact_id,
         ArtifactAsset.tenant_id==p.tenant_id,
         ArtifactAsset.project_id==project_id,
+        ArtifactAsset.artifact_kind!="chat_attachment",
     ))
     if not asset: raise HTTPException(404,"artifact_not_found")
     try:

@@ -3,31 +3,47 @@ from __future__ import annotations
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, exists
 from sqlalchemy.orm import Session
 
 from .audit import emit
 from .auth import Principal, get_principal
 from .chat_models import ChatMessage, ChatThread
+from .config import settings
+from .chat_attachments import resolve_for_message
 from .chat_service import ChatProviderError, chat_status, generate_reply
 from .context import build, project_or_404
 from .database import get_db
-from .models import now
+from .models import now, ArtifactAsset
 
 
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 
+def _attachment_scope(db: Session, p: Principal, thread: ChatThread) -> None:
+    """Any thread containing attachments becomes creator-private, without altering
+    visibility of the preexisting shared chat threads."""
+    other_file = db.scalar(select(ArtifactAsset.id).where(
+        ArtifactAsset.tenant_id == p.tenant_id,
+        ArtifactAsset.project_id == thread.project_id,
+        ArtifactAsset.artifact_kind == "chat_attachment",
+        ArtifactAsset.metadata_json["thread_id"].as_string() == thread.id,
+    ).limit(1))
+    if other_file is not None and thread.created_by != p.subject:
+        raise HTTPException(404, "chat_thread_not_found")
 
-def _thread_or_404(db: Session, tenant_id: str, thread_id: str) -> ChatThread:
+
+
+def _thread_or_404(db: Session, p: Principal, thread_id: str) -> ChatThread:
     thread = db.scalar(
         select(ChatThread).where(
             ChatThread.id == thread_id,
-            ChatThread.tenant_id == tenant_id,
+            ChatThread.tenant_id == p.tenant_id,
             ChatThread.status == "active",
         )
     )
     if not thread:
         raise HTTPException(404, "chat_thread_not_found")
+    _attachment_scope(db, p, thread)
     return thread
 
 
@@ -50,6 +66,7 @@ def status(p: Principal = Depends(get_principal)):
     return {
         "status": "available" if chat_status()["configured"] else "not_configured",
         **chat_status(),
+        "attachments_enabled": settings.chat_attachments_enabled,
     }
 
 
@@ -64,6 +81,19 @@ def list_threads(
             ChatThread.status == "active",
         ).order_by(ChatThread.updated_at.desc())
     ).all()
+    # A thread with attachments is private to its creator; other threads
+    # preserve their original tenant-wide visibility.
+    items = [
+        x for x in items
+        if x.created_by == p.subject or not db.scalar(
+            select(ArtifactAsset.id).where(
+                ArtifactAsset.tenant_id == p.tenant_id,
+                ArtifactAsset.project_id == x.project_id,
+                ArtifactAsset.artifact_kind == "chat_attachment",
+                ArtifactAsset.metadata_json["thread_id"].as_string() == x.id,
+            ).limit(1)
+        )
+    ]
     return [
         {
             "id": x.id,
@@ -125,7 +155,7 @@ def list_messages(
     p: Principal = Depends(get_principal),
     db: Session = Depends(get_db),
 ):
-    thread = _thread_or_404(db, p.tenant_id, thread_id)
+    thread = _thread_or_404(db, p, thread_id)
     items = db.scalars(
         select(ChatMessage).where(
             ChatMessage.tenant_id == p.tenant_id,
@@ -144,12 +174,18 @@ def send_message(
     p: Principal = Depends(get_principal),
     db: Session = Depends(get_db),
 ):
-    thread = _thread_or_404(db, p.tenant_id, thread_id)
+    thread = _thread_or_404(db, p, thread_id)
     content = str(body.get("content") or "").strip()
     if not content:
         raise HTTPException(422, "chat_message_required")
     if len(content) > 8000:
         raise HTTPException(422, "chat_message_too_long")
+
+    attachment_rows, attachment_context = resolve_for_message(
+        db, p, thread, body.get("attachment_ids")
+    )
+    if attachment_rows and body.get("allow_external_ai") is not True:
+        raise HTTPException(422, "chat_attachment_consent_required")
 
     request_id = x_request_id or str(uuid4())
     correlation_id = x_correlation_id or request_id
@@ -187,6 +223,13 @@ def send_message(
         actor_id=p.subject,
     )
     db.add(user_message)
+    if attachment_rows:
+        db.flush()
+        for item in attachment_rows:
+            item.metadata_json = {
+                **(item.metadata_json or {}),
+                "linked_message_id": user_message.id,
+            }
     if thread.title == "Nova conversa":
         thread.title = content[:80]
     thread.updated_at = now()
@@ -206,6 +249,7 @@ def send_message(
         answer, provider, model = generate_reply(
             messages=history + [{"role": "user", "content": content}],
             project_context=context,
+            attachments=attachment_context,
             request_id=request_id,
             correlation_id=correlation_id,
         )
@@ -245,4 +289,8 @@ def send_message(
         "thread_id": thread.id,
         "user_message": _message_payload(user_message),
         "assistant_message": _message_payload(assistant_message),
+        "attachment_sources": [
+            {"id": x.id, "filename": x.filename, "source_ref": f"glip-chat-attachment:{x.id}"}
+            for x in attachment_rows
+        ],
     }
